@@ -54,6 +54,10 @@ data0 %>%
   group_by(`Группа`) %>%
   mutate(`Процент по группе` = (n / sum(n)) %>% round(4) %>% `*`(100) %>% str_c("%")) %>%
   ungroup() %>% 
-  mutate(`Процент по выборке` = (n / sum(n)) %>% round(4) %>% `*`(100) %>% str_c("%"))
+  mutate(`Процент по выборке` = (n / sum(n)) %>% round(4) %>% `*`(100) %>% str_c("%")) %>%
+  flextable() %>%
+  theme_box() %>%
+  merge_v(c("Группа")) -> data2
+  #write_rds(data2, "BioStat_2023/output_table2.rds")
 ``` 
 
