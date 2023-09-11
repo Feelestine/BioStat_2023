@@ -18,7 +18,7 @@ library(openxlsx)
 ```{r}
 read_delim("data_tsv.tsv") -> data0
 ```
-
+#Количественная таблица
 ```{r}
 statistics <- list(
       `Количество субъектов` = ~length(.x),
@@ -45,7 +45,7 @@ data0 %>%
   write_rds(data1, "BioStat_2023/output_table.rds")
 
 ```
-
+#Категориальная таблица
 ```{r}
 data0 %>%
   select(`Группа`, `Группа крови`, where(is.factor)) %>%
@@ -58,6 +58,6 @@ data0 %>%
   flextable() %>%
   theme_box() %>%
   merge_v(c("Группа")) -> data2
-  #write_rds(data2, "BioStat_2023/output_table2.rds")
+  write_rds(data2, "BioStat_2023/output_table2.rds")
 ``` 
 
