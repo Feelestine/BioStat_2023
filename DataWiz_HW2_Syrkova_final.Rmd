@@ -1,0 +1,253 @@
+---
+title: "DataWiz_HW2_Syrkova"
+output: html_document
+date: "2023-11-09"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+#Пакеты
+```{r}
+library(tidyverse)
+library(readxl)
+library(openxlsx)
+library(dplyr)
+library(ggplot2)
+library(plotly)
+library(ggpubr)
+library(nortest)
+library(skimr)
+library(flextable)
+library(ggbeeswarm)
+library(rstatix)
+library(corrplot)
+library(corrr)
+library(GGally)
+library(factoextra)
+library(pheatmap)
+library(ggbiplot)
+#library(tidymodels)
+library(embed)
+library(FactoMineR)
+
+
+```
+
+#Задание 1. Загрузите датасет life_expectancy_data.RDS
+```{r}
+readRDS("life_expectancy_data.RDS") -> data_raw
+```
+
+```{r, eval=FALSE}
+data_raw %>%
+  glimpse()
+```
+
+#Задание 2. Сделайте интерактивный plotly график любых двух нумерических колонок. Раскрасть по колонке континента, на котором расположена страна
+
+```{r}
+plot_ly(
+  data = data_raw[(data_raw$`Life expectancy`!= 0) & (data_raw$`Tuberculosis Incidence` != 0),],
+  x = ~ `Life expectancy`,
+  y = ~ `Tuberculosis Incidence`,
+  color = ~continent,
+  marker = list(
+    size = 9,
+    line = list(color = 'rgba(152, 0, 0, .6)', 
+                width = 1)
+  )
+)   %>%
+  layout(
+    title = 'Отношение Ожидаемой продолжительности жизни и Заболеваемости туберкулезом',
+    yaxis = list(title = 'Ожидаемая продолжительность жизни',
+                 zeroline = FALSE),  
+    xaxis = list(title = 'Заболеваемость туберкулезом',
+                 zeroline = FALSE)) 
+```
+
+# Задание 3. Проведите тест, на сравнение распределений колонки `Life expectancy` между группами стран Африки и Америки. Вид статистического теста определите самостоятельно. Визуализируйте результат через библиотеку `rstatix`.
+```{r}
+
+data_raw %>%
+  select('Life expectancy', 'continent') %>%
+  filter(continent == "Africa" | continent == "Americas") -> data_life
+
+t_test(data = data_life, formula = `Life expectancy` ~ continent)
+  
+
+```
+
+```{r}
+stat.test <- data_life %>%
+  group_by(continent) %>%
+  t_test(data = data_life, formula = `Life expectancy` ~ continent) %>%
+  adjust_pvalue(method = "bonferroni") %>%
+  add_significance("p.adj")
+stat.test
+
+bxp <- ggboxplot(
+  data_life, y = "Life expectancy", x = "continent", 
+  palette = c("#00AFBB", "#E7B800")
+  )
+
+stat.test <- stat.test %>%
+  add_xy_position(x = "Life expectancy", dodge = 0.8)
+bxp + stat_pvalue_manual(
+  stat.test,  label = "p", tip.length = 0
+  )
+```
+
+
+
+
+# Задание 4. Сделайте новый датафрейм, в котором оставите все численные колонки кроме `Year`. Сделайте корреляционный анализ этих данных. Постройте два любых типа графиков для визуализации корреляций.
+
+
+```{r}
+data_selected <- data_raw %>% select(!Year) %>% select(where(is.numeric))
+
+data_cor <- cor(data_selected)
+
+#график 1
+corrplot(data_cor, method = 'color', type = "lower")
+
+#график 2
+data_cor %>% 
+  rplot()
+```
+
+
+# Задание 5. Постройте иерархическую кластеризацию на этом датафрейме.
+
+```{r}
+data_selected_scaled <- scale(data_selected)
+
+data_selected_dist <- dist(data_selected_scaled, 
+                        method = "euclidean"
+                        )
+as.matrix(data_selected_dist)[1:6,1:6]
+
+data_selected_hc <- hclust(d = data_selected_dist, 
+                        method = "ward.D2")
+
+fviz_dend(data_selected_hc, 
+          cex = 0.1) 
+
+```
+# Задание 6. Сделайте одновременный график heatmap и иерархической кластеризации. Содержательно интерпретируйте результат.
+
+```{r}
+pheatmap(data_selected_scaled, 
+         show_rownames = FALSE, 
+         clustering_distance_rows = data_selected_dist,
+         clustering_method = "ward.D2", 
+         cutree_rows = 5,
+         cutree_cols = length(colnames(data_selected_scaled)),
+         angle_col = 45, 
+         main = "Dendrograms for clustering rows and columns with heatmap")
+
+#Интерпретация: 
+# В первой группе пациентов выделяются показатели смертности и заболеваемости туберкулезом и в отрицательную сторону вакцинация. В целом данные и особенно Пятая группа довольно размыты. Выделилась третья маленькая группа, в ней сильно выделились показатели GDP и GNI.
+```
+
+# Задание 7. Проведите PCA анализ на этих данных. Проинтерпретируйте результат. 
+
+```{r}
+data_full.pca <- prcomp(data_selected, 
+                        scale = T)
+summary(data_full.pca)
+
+# Смотрим Cumulative Proportion - PC1, PC2 и PC3 чуть больше 60% (заметно меньше 75%), для первых двух - 51: (меньше 60%). В целом, это не слишком хороший результат. Далее посомтрим график
+```
+
+
+```{r}
+fviz_eig(data_full.pca, addlabels = T, ylim = c(0, 40))
+
+# Выделяется первая компонента, вторая и третья заметно меньше. Дальше имеет смысл рассматривать в первую очередь их
+```
+
+```{r}
+# График для двух главных компонент
+fviz_pca_var(data_full.pca, col.var = "contrib")
+```
+
+
+```{r}
+# График для двух главных компонент с выбранным количеством контрибьюторов
+fviz_pca_var(data_full.pca, 
+             select.var = list(contrib = 8), 
+             col.var = "contrib")
+
+# Стрелки довольно близки к кругу
+```
+
+```{r}
+fviz_contrib(data_full.pca, choice = "var", axes = 1, top = 24) # 1
+fviz_contrib(data_full.pca, choice = "var", axes = 2, top = 24) # 2
+fviz_contrib(data_full.pca, choice = "var", axes = 3, top = 24) # 3
+# Из чего состоят три главные компоненты
+#PC1 - довольно много переменных, основных - 4
+#PC2 составляют в первую очередь переменные иммунизаций
+#PC3 состоит из GDP и GNI 
+```
+
+
+# Задание 8. Постройте biplot график для PCA. Раскрасьте его по значениям континентов. Переведите его в `plotly`. Желательно, чтобы при наведении на точку, вы могли видеть название страны.
+
+Вариант 1
+```{r}
+ggbiplot(data_full.pca, 
+         scale=0, alpha = 0.1, varname.size = 4, groups = data_raw$continent, labels = data_raw$Country, labels.size = 1, ellipse = T) + 
+  theme_minimal() -> PCA_biplot
+
+ggplotly(PCA_biplot, tooltip = c("groups", "labels"))
+```
+
+Вариант 2
+```{r}
+ggbiplot(data_full.pca, 
+         scale=0, alpha = 0.3, groups = data_raw$continent, ellipse = T) + 
+  theme_minimal() -> PCA_biplot
+
+ggplotly(PCA_biplot, tooltip = c("groups"))
+```
+
+
+# Задание 9. Дайте содержательную интерпретацию PCA анализу. 
+
+```{r, eval=FALSE}
+Выделяются 3 главные компоненты. В первую компоненту входят сразу несколько разных показателей (основная - ожидаемая продолжительность жизни), во вторую - показатели иммунизации (они хорошо скоррелированы), третья компонента состоит из GDP и GNI и они сильно скоррелированы, хотя их вклад заметно меньше других переменных (кроме суицидов, безработицы и лечения туберкулеза) 
+
+Такие показатели, как Городское население и Сельское население, противоположно направлены, но вносят одинаковый вклад. При этом показатель Per Capita совпадает с Urban population по направлению, но вносит несколько меньший вклад. 
+
+Для данного датасета имеет смысл проводить PCA, но 
+```
+
+# Задание 10. Сравните результаты отображения точек между алгоритмами PCA и UMAP.
+
+```{r}
+umap_prep <- recipe(~., data = data_selected) %>% 
+  step_normalize(all_predictors()) %>% 
+  step_umap(all_predictors()) %>% 
+  prep() %>% 
+  juice() 
+
+```
+
+```{r}
+umap_prep2 <- cbind(umap_prep, data_raw)
+
+umap_prep2 %>%
+  ggplot(aes(UMAP1, UMAP2)) + 
+  geom_point(aes(color = continent,
+             alpha = 0.6, size = 2)) +
+  labs(color = NULL) 
+```
+
+```{r, eval=FALSE}
+В UMAP прослеживается тенденция, что данные внутри региона близки друг к другу, тк на получившемся графике точки группируются по регионам. Для регионов Азия, Америка и Океания отмечатеся более разраженное расположение точек, что возможно объясняется большец неоднорожностью данных внутри региона. 
+```
+
